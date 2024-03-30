@@ -306,12 +306,22 @@ def get_pose_obj(x, y, fi, rc):
     goal_pose.header.frame_id = 'map'
     goal_pose.header.stamp = rc.get_clock().now().to_msg()
 
-    goal_pose.pose.position.x = 2.6
-    goal_pose.pose.position.y = -1.3
-    goal_pose.pose.orientation = rc.YawToQuaternion(0.57)
+    goal_pose.pose.position.x = x
+    goal_pose.pose.position.y = y
+    goal_pose.pose.orientation = rc.YawToQuaternion(fi)
 
     return goal_pose
 
+def add_to_nav_list(to_add_list, nav_list, rc, spin_full_after_go=False):
+
+    for tup in to_add_list:
+        if tup[0] == "go":
+            to_add = (*tup[1], rc)
+            nav_list.append(("go", get_pose_obj(*to_add)))
+            if spin_full_after_go:
+                nav_list.append(("spin", 3.14))
+        elif tup[0] == "spin":
+            nav_list.append(("spin", tup[1]))
 
 
 
@@ -332,17 +342,188 @@ def main(args=None):
         rc.undock()
     
 
+
+
+
+    # The mesh in rviz is coordinates.
+    # The docking station is 0,0
+    # Use Publish Point to hover and see the coordinates.
+    # x: -2 to 4
+    # y: -2.5 to 5
+        
+
+    
+
+
+
+
+
     # contains tuples of two types:
     # ("go", <PoseStamped object>), ("spin", angle_to_spin_to)
     navigation_list = []
 
-    navigation_list.append(("go", get_pose_obj(2.6, -1.3, 0.57, rc)))
-    navigation_list.append(("spin", -0.57))
-    navigation_list.append(("go", get_pose_obj(2.0, -1.0, 0.57, rc)))
+    
+
+    add_to_navigation = [
+        
+        # spin spins the robot in place for fi. It doesn't orient it to fi.
+        ("spin", 3.14),
+        
+        # Starting point
+        ("go", (0.0, 0.0, 0.57)),
+
+        # Down right
+        ("go", (-1.0, 0.25, 0.57)),
+        ("go", (-1.6, -0.7, 0.57)),
+        ("go", (-0.4, -0.6, 0.57)),
+        ("go", (-0.3, -1.85, 0.57)),
+
+        # Right
+        ("go", (1.0, -1.9, 0.57)),
+        ("go", (2.2, -2.0, 0.57)),
+
+        # Right up
+        ("go", (3.4, -1.3, 0.57)),
+        ("go", (2.0, -1.0, 0.57)),
+
+        # Centre up
+        ("go", (1.5, 0.0, 0.57)),
+        ("go", (1.0, 0.0, 0.57)),
+        ("go", (2.5, 1.0, 0.57)),
+
+        # Slightly left slightly up
+        ("go", (1.5, 2.0, 0.57)),
+        ("go", (1.0,1.0, 0.57)),
+        ("go", (1.0,2.0, 0.57)),
+        ("go", (0.0, 2.0, 0.57)),
+
+        # Slightly left slightly down
+        ("go", (-1.0, 1.0, 0.57)),
+        ("go", (-1.75, 1.0, 0.57)),
+        ("go", (-1.75, 2.0, 0.57)),
+
+        # Left down
+        ("go", (-1.5, 4.5, 0.57)),
+        ("go", (-1.0, 3.0, 0.57)),
+
+        # Left corridor
+        ("go", (0.0, 3.2, 0.57)),
+        ("go", (0.5, 2.8, 0.57)),
+        ("go", (1.0, 3.5, 0.57)),
+
+        # Left up
+        ("go", (1.5, 2.9, 0.57)),
+        ("go", (2.0,3.0, 0.57)),
+
+        # Back to slightly left slightly up
+        ("go", (1.5, 2.0, 0.57)),
+    ]
 
 
+
+    add_to_nav_list(add_to_navigation, navigation_list, rc, spin_full_after_go=False)
+
+
+
+
+
+
+    # Old way of doing it:
+    if False:
+        # Path:
+        # -1, 0.25
+        # -1.6, 0.7
+        # -0.4, -0.6
+        # -0.3, -1.85
+        # 1, -1.9
+        # 2.2, -2
+        # 3.4, -1.3
+        # 2, -1
+        # 1.5, 0
+        # 1, 0
+        # 2.5, 1
+        # 1.5, 2
+        # 1,1
+        # 1,2
+        # 0, 2
+        # -1, 1
+        # -1,75, 1
+        # -1,75, 2
+        # -1.5, 4.5
+        # -1, 3
+        # 0, 3.2
+        # 0.5, 2.8
+        # 1, 3.5
+        # 1.5, 2.9
+        # 2,3
+        # Down right
+        navigation_list.append(("go", get_pose_obj(-1.0, 0.25, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(-1.6, 0.7, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(-0.4, -0.6, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(-0.3, -1.85, 0.57, rc)))
+
+        # Right
+        navigation_list.append(("go", get_pose_obj(1.0, -1.9, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(2.2, -2.0, 0.57, rc)))
+
+        # Right up
+        navigation_list.append(("go", get_pose_obj(3.4, -1.3, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(2.0, -1.0, 0.57, rc)))
+
+        # Centre up
+        navigation_list.append(("go", get_pose_obj(1.5, 0.0, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(1.0, 0.0, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(2.5, 1.0, 0.57, rc)))
+
+        # Slightly left slightly up
+        navigation_list.append(("go", get_pose_obj(1.5, 2.0, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(1.0,1.0, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(1.0,2.0, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(0.0, 2.0, 0.57, rc)))
+
+        # Slightly left slightly down
+        navigation_list.append(("go", get_pose_obj(-1.0, 1.0, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(-1.75, 1.0, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(-1.75, 2.0, 0.57, rc)))
+
+        # Left down
+        navigation_list.append(("go", get_pose_obj(-1.5, 4.5, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(-1.0, 3.0, 0.57, rc)))
+
+        # Left corridor
+        navigation_list.append(("go", get_pose_obj(0.0, 3.2, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(0.5, 2.8, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(1.0, 3.5, 0.57, rc)))
+
+        # Left up
+        navigation_list.append(("go", get_pose_obj(1.5, 2.9, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(2.0,3.0, 0.57, rc)))
+
+        # Back to slightly left slightly up
+        navigation_list.append(("go", get_pose_obj(1.5, 2.0, 0.57, rc)))
+    
+       
+    
+    
+
+
+
+
+
+
+
+
+
+    add_to_navigation_ix = 0
 
     while len(navigation_list) > 0:
+
+        # Printing if the goal was added on the initioal list.
+        if add_to_navigation_ix < len(add_to_navigation):
+            print(add_to_navigation[add_to_navigation_ix])
+            add_to_navigation_ix += 1
+
+
         curr_type, curr_goal = navigation_list[0]
         
         if curr_type == "go":
@@ -355,6 +536,9 @@ def main(args=None):
             time.sleep(1)
         
         del navigation_list[0]
+    
+        # input("Enter sth to continue.")
+        
     
     input("Navigation list completed, waiting to terminate. Enter anything.")
         
