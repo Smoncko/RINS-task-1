@@ -296,7 +296,25 @@ class RobotCommander(Node):
     def debug(self, msg):
         self.get_logger().debug(msg)
         return
-    
+
+
+
+
+def get_pose_obj(x, y, fi, rc):
+
+    goal_pose = PoseStamped()
+    goal_pose.header.frame_id = 'map'
+    goal_pose.header.stamp = rc.get_clock().now().to_msg()
+
+    goal_pose.pose.position.x = 2.6
+    goal_pose.pose.position.y = -1.3
+    goal_pose.pose.orientation = rc.YawToQuaternion(0.57)
+
+    return goal_pose
+
+
+
+
 def main(args=None):
     
     rclpy.init(args=args)
@@ -313,22 +331,62 @@ def main(args=None):
     if rc.is_docked:
         rc.undock()
     
-    # Finally send it a goal to reach
-    goal_pose = PoseStamped()
-    goal_pose.header.frame_id = 'map'
-    goal_pose.header.stamp = rc.get_clock().now().to_msg()
 
-    goal_pose.pose.position.x = 2.6
-    goal_pose.pose.position.y = -1.3
-    goal_pose.pose.orientation = rc.YawToQuaternion(0.57)
+    # contains tuples of two types:
+    # ("go", <PoseStamped object>), ("spin", angle_to_spin_to)
+    navigation_list = []
 
-    rc.goToPose(goal_pose)
+    navigation_list.append(("go", get_pose_obj(2.6, -1.3, 0.57, rc)))
+    navigation_list.append(("spin", -0.57))
+    navigation_list.append(("go", get_pose_obj(2.0, -1.0, 0.57, rc)))
 
-    while not rc.isTaskComplete():
-        rc.info("Waiting for the task to complete...")
-        time.sleep(1)
 
-    rc.spin(-0.57)
+
+    while len(navigation_list) > 0:
+        curr_type, curr_goal = navigation_list[0]
+        
+        if curr_type == "go":
+            rc.goToPose(curr_goal)
+        elif curr_type == "spin":
+            rc.spin(curr_goal)
+        
+        while not rc.isTaskComplete():
+            rc.info("Waiting for the task to complete...")
+            time.sleep(1)
+        
+        del navigation_list[0]
+    
+    input("Navigation list completed, waiting to terminate. Enter anything.")
+        
+
+
+
+    
+
+    # Example
+    if False:    
+        # Finally send it a goal to reach
+        goal_pose = PoseStamped()
+        goal_pose.header.frame_id = 'map'
+        goal_pose.header.stamp = rc.get_clock().now().to_msg()
+
+        goal_pose.pose.position.x = 2.6
+        goal_pose.pose.position.y = -1.3
+        goal_pose.pose.orientation = rc.YawToQuaternion(0.57)
+
+        rc.goToPose(goal_pose)
+
+        while not rc.isTaskComplete():
+            rc.info("Waiting for the task to complete...")
+            time.sleep(1)
+
+        rc.spin(-0.57)
+
+
+
+
+
+
 
     rc.destroyNode()
 
