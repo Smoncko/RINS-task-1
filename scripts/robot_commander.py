@@ -84,27 +84,11 @@ qos_profile = amcl_pose_qos
 
 
 
-
-
-
-
-
-
-
-
-
-class MapGoals(Node):
-    """Demonstrating some convertions and loading the map as an image"""
+class MapGoalsPossiblyUsefulFuncs(Node):
+    
     def __init__(self):
-
-        # self.map_goals = self.create_subscription(PointStamped, "/map_goals", self.map_goals_callback, qos_profile)
-
         super().__init__('map_goals')
 
-        # Basic ROS stuff
-        timer_frequency = 2
-        map_topic = "/map"
-        timer_period = 1/timer_frequency
 
         # Functional variables
         self.pending_goal = False
@@ -113,61 +97,9 @@ class MapGoals(Node):
         self.clicked_x = None
         self.clicked_y = None
         self.ros_occupancy_grid = None
-        self.map_np = None
-        self.map_data = {"map_load_time":None,
-                         "resolution":None,
-                         "width":None,
-                         "height":None,
-                         "origin":None} # origin will be in the format [x,y,theta]
-
-        # Subscribe to map, and create an action client for sending goals
-        self.occupancy_grid_sub = self.create_subscription(OccupancyGrid, map_topic, self.map_callback, qos_profile)
-        self.nav_to_pose_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
-
-        # Create a timer, to do the main work.
-        self.timer = self.create_timer(timer_period, self.timer_callback)
 
         self.get_logger().info(f"Node has been initialized! Will perform the tasks.")
 
-        cv2.namedWindow("ROS2 map", cv2.WINDOW_NORMAL)
-
-    def click_event(self, event, x, y, flags, params): 
-    
-        self.clicked_x = x
-        self.clicked_y = y
-        # checking for left mouse clicks 
-        if event == cv2.EVENT_LBUTTONDOWN: 
-            self.get_logger().info(f"Clicked a new point: {x}, {y}.")
-            if not self.currently_navigating:
-                self.get_logger().info(f"Will generate and send a new goal! Eventually.")
-                self.clicked_x = x
-                self.clicked_y = y
-                self.pending_goal = True
-            else:
-                self.get_logger().info(f"Robot is being navigated, goal rejected!")
-
-    def timer_callback(self):
-        if self.map_np is None:
-            self.get_logger().info(f"Waiting for a new map to be loaded!")
-            return
-        
-        # if not self.map_np is None and not self.clicked_x is None:
-        #     world_x, world_y = self.map_pixel_to_world(self.clicked_x, self.clicked_y)
-        #     world_orientation = 0.            
-        #     x, y = self.world_to_map_pixel(world_x, world_y)
-        #     # Put a one pixel dot in the map image, to verify conversion
-        #     self.map_np[int(y-1)][int(x-1)] = 0
-        
-        # If the robot is not currently navigating to a goal, and there is a goal pending
-        if not self.currently_navigating and self.pending_goal:
-            world_x, world_y = self.map_pixel_to_world(self.clicked_x, self.clicked_y)
-            world_orientation = 0.
-            goal_pose = self.generate_goal_message(world_x, world_y, world_orientation)
-            self.go_to_pose(goal_pose)
-
-        cv2.imshow("ROS2 map", self.map_np)
-        cv2.setMouseCallback("ROS2 map", self.click_event)
-        key = cv2.waitKey(1)
 
     def generate_goal_message(self, x, y, theta=0.2):
         goal_pose = PoseStamped()
@@ -180,6 +112,7 @@ class MapGoals(Node):
 
         return goal_pose
 
+    """This is meant for self.map_np, which is the map in numpy format, as read from the topic "/map"."""
     def map_pixel_to_world(self, x, y, theta=0):
         ### Convert a pixel in an numpy image, to a real world location
         ### Works only for theta=0
@@ -205,29 +138,6 @@ class MapGoals(Node):
         
         # Apply rotation
         return x, y
-
-    def map_callback(self, msg):
-        self.get_logger().info(f"Read a new Map (Occupancy grid) from the topic.")
-        # reshape the message vector back into a map
-        self.map_np = np.asarray(msg.data, dtype=np.int8).reshape(msg.info.height, msg.info.width)
-        # fix the direction of Y (origin at top for OpenCV, origin at bottom for ROS2)
-        self.map_np = np.flipud(self.map_np)
-        # change the colors so they match with the .pgm image
-        self.map_np[self.map_np==0] = 127
-        self.map_np[self.map_np==100] = 0
-        # load the map parameters
-        self.map_data["map_load_time"]=msg.info.map_load_time
-        self.map_data["resolution"]=msg.info.resolution
-        self.map_data["width"]=msg.info.width
-        self.map_data["height"]=msg.info.height
-        quat_list = [msg.info.origin.orientation.x,
-                     msg.info.origin.orientation.y,
-                     msg.info.origin.orientation.z,
-                     msg.info.origin.orientation.w]
-        self.map_data["origin"]=[msg.info.origin.position.x,
-                                 msg.info.origin.position.y,
-                                 tf_transformations.euler_from_quaternion(quat_list)[-1]]
-        #self.get_logger().info(f"Read a new Map (Occupancy grid) from the topic.")
 
     def go_to_pose(self, pose):
         """Send a `NavToPose` action request."""
@@ -301,100 +211,6 @@ class MapGoals(Node):
 
 
 
-class TranformPoints(Node):
-    """Demonstrating some convertions and loading the map as an image"""
-    def __init__(self):
-        super().__init__('map_goals')
-
-        # Basic ROS stuff
-        timer_frequency = 1
-        timer_period = 1/timer_frequency
-
-        # Functionality variables
-        self.marker_id = 0
-
-        # For listening and loading the 
-        self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
-
-        # For publishing the markers
-        self.marker_pub = self.create_publisher(Marker, "/breadcrumbs", QoSReliabilityPolicy.BEST_EFFORT)
-
-        # Create a timer, to do the main work.
-        self.timer = self.create_timer(timer_period, self.timer_callback)
-
-    def timer_callback(self):
-        # Create a PointStamped in the /base_link frame of the robot
-        # The point is located 0.5m in from of the robot
-        # "Stamped" means that the message type contains a Header
-        point_in_robot_frame = PointStamped()
-        point_in_robot_frame.header.frame_id = "/base_link"
-        point_in_robot_frame.header.stamp = self.get_clock().now().to_msg()
-
-        point_in_robot_frame.point.x = 0.5
-        point_in_robot_frame.point.y = 0.
-        point_in_robot_frame.point.z = 0. 
-
-        # Now we look up the transform between the base_link and the map frames
-        # and then we apply it to our PointStamped
-        time_now = rclpy.time.Time()
-        timeout = rclpyDuration(seconds=0.1)
-        try:
-            # An example of how you can get a transform from /base_link frame to the /map frame
-            # as it is at time_now, wait for timeout for it to become available
-            trans = self.tf_buffer.lookup_transform("map", "base_link", time_now, timeout)
-            self.get_logger().info(f"Looks like the transform is available.")
-
-            # Now we apply the transform to transform the point_in_robot_frame to the map frame
-            # The header in the result will be copied from the Header of the transform
-            point_in_map_frame = tfg.do_transform_point(point_in_robot_frame, trans)
-            self.get_logger().info(f"We transformed a PointStamped!")
-
-            # If the transformation exists, create a marker from the point, in order to visualize it in Rviz
-            marker_in_map_frame = self.create_marker(point_in_map_frame, self.marker_id)
-
-            # Publish the marker
-            self.marker_pub.publish(marker_in_map_frame)
-            self.get_logger().info(f"The marker has been published to /breadcrumbs. You are able to visualize it in Rviz")
-
-            # Increase the marker_id, so we dont overwrite the same marker.
-            self.marker_id += 1
-
-        except TransformException as te:
-            self.get_logger().info(f"Cound not get the transform: {te}")
-
-
-
-    def create_marker(self, point_stamped, marker_id):
-        """You can see the description of the Marker message here: https://docs.ros2.org/galactic/api/visualization_msgs/msg/Marker.html"""
-        marker = Marker()
-
-        marker.header = point_stamped.header
-
-        marker.type = marker.CUBE
-        marker.action = marker.ADD
-        marker.id = marker_id
-
-        # Set the scale of the marker
-        scale = 0.15
-        marker.scale.x = scale
-        marker.scale.y = scale
-        marker.scale.z = scale
-
-        # Set the color
-        marker.color.r = 1.0
-        marker.color.g = 0.0
-        marker.color.b = 0.0
-        marker.color.a = 1.0
-
-        # Set the pose of the marker
-        marker.pose.position.x = point_stamped.point.x
-        marker.pose.position.y = point_stamped.point.y
-        marker.pose.position.z = point_stamped.point.z
-
-        return marker
-
-
 
 
 
@@ -421,9 +237,14 @@ class RobotCommander(Node):
                          "width":None,
                          "height":None,
                          "origin":None} # origin will be in the format [x,y,theta]
+        
+
+        
 
 
         # ROS2 subscribers
+        self.occupancy_grid_sub = self.create_subscription(OccupancyGrid, map_topic, self.map_callback, qos_profile)
+        
         self.create_subscription(DockStatus,
                                  'dock_status',
                                  self._dockCallback,
@@ -444,8 +265,6 @@ class RobotCommander(Node):
         self.spin_client = ActionClient(self, Spin, 'spin')
         self.undock_action_client = ActionClient(self, Undock, 'undock')
         self.dock_action_client = ActionClient(self, Dock, 'dock')
-
-        self.occupancy_grid_sub = self.create_subscription(OccupancyGrid, map_topic, self.map_callback, qos_profile)
 
         self.get_logger().info(f"Robot commander has been initialized!")
         
@@ -504,6 +323,15 @@ class RobotCommander(Node):
                                     msg.info.origin.position.y,
                                     tf_transformations.euler_from_quaternion(quat_list)[-1]]
             #self.get_logger().info(f"Read a new Map (Occupancy grid) from the topic.")
+
+
+
+    def make_cv2_window(self):
+        cv2.namedWindow("Just for showing what is in rc.map_np", cv2.WINDOW_NORMAL)
+
+    def show_map(self):
+        cv2.imshow("Just for showing what is in rc.map_np", self.map_np)
+        cv2.waitKey(1000)
 
     def goToPose(self, pose, behavior_tree=''):
         """Send a `NavToPose` action request."""
@@ -744,8 +572,8 @@ def main(args=None):
 
     rclpy.init(args=args)
 
-    map_goals = MapGoals()
-    trans_points = TranformPoints()
+    mg_fns = MapGoalsPossiblyUsefulFuncs()
+    # trans_points = TranformPoints()
     
     rc = RobotCommander()
 
@@ -929,13 +757,16 @@ def main(args=None):
 
 
 
+    
 
 
-
+    # rc.make_cv2_window()
+    # rc.show_map()
 
     add_to_navigation_ix = 0
 
     while len(navigation_list) > 0:
+        
 
         # Printing if the goal was added on the initioal list.
         if add_to_navigation_ix < len(add_to_navigation):
