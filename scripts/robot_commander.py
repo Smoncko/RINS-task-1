@@ -21,11 +21,18 @@ from action_msgs.msg import GoalStatus
 from builtin_interfaces.msg import Duration
 from geometry_msgs.msg import Quaternion, PoseStamped, PoseWithCovarianceStamped
 from lifecycle_msgs.srv import GetState
+from nav_msgs.msg import OccupancyGrid
 from nav2_msgs.action import Spin, NavigateToPose
 from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
 
 from irobot_create_msgs.action import Dock, Undock
 from irobot_create_msgs.msg import DockStatus
+
+import tf_transformations
+
+from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
+
+import numpy as np
 
 import rclpy
 from rclpy.action import ActionClient
@@ -48,6 +55,12 @@ amcl_pose_qos = QoSProfile(
           history=QoSHistoryPolicy.KEEP_LAST,
           depth=1)
 
+qos_profile = QoSProfile(
+          durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+          reliability=QoSReliabilityPolicy.RELIABLE,
+          history=QoSHistoryPolicy.KEEP_LAST,
+          depth=1)
+
 class RobotCommander(Node):
 
     def __init__(self, node_name='robot_commander', namespace=''):
@@ -62,6 +75,16 @@ class RobotCommander(Node):
         self.status = None
         self.initial_pose_received = False
         self.is_docked = None
+
+        map_topic = "/map"
+
+        self.map_np = None
+        self.map_data = {"map_load_time":None,
+                         "resolution":None,
+                         "width":None,
+                         "height":None,
+                         "origin":None} # origin will be in the format [x,y,theta]
+
 
         # ROS2 subscribers
         self.create_subscription(DockStatus,
@@ -85,11 +108,65 @@ class RobotCommander(Node):
         self.undock_action_client = ActionClient(self, Undock, 'undock')
         self.dock_action_client = ActionClient(self, Dock, 'dock')
 
+        self.occupancy_grid_sub = self.create_subscription(OccupancyGrid, map_topic, self.map_callback, qos_profile)
+
         self.get_logger().info(f"Robot commander has been initialized!")
         
     def destroyNode(self):
         self.nav_to_pose_client.destroy()
         super().destroy_node()     
+
+
+    def map_pixel_to_world(self, x, y, theta=0):
+        ### Convert a pixel in an numpy image, to a real world location
+        ### Works only for theta=0
+        assert not self.map_data["resolution"] is None
+
+        # Apply resolution, change of origin, and translation
+        # 
+        world_x = x*self.map_data["resolution"] + self.map_data["origin"][0]
+        world_y = (self.map_data["height"]-y)*self.map_data["resolution"] + self.map_data["origin"][1]
+
+        # Apply rotation
+        return world_x, world_y
+
+    def world_to_map_pixel(self, world_x, world_y, world_theta=0.2):
+        ### Convert a real world location to a pixel in a numpy image
+        ### Works only for theta=0
+        assert self.map_data["resolution"] is not None
+
+        # Apply resolution, change of origin, and translation
+        # x is the first coordinate, which in opencv (numpy) that is the matrix row - vertical
+        x = int((world_x - self.map_data["origin"][0])/self.map_data["resolution"])
+        y = int(self.map_data["height"] - (world_y - self.map_data["origin"][1])/self.map_data["resolution"] )
+        
+        # Apply rotation
+        return x, y
+
+
+
+    def map_callback(self, msg):
+            self.get_logger().info(f"Read a new Map (Occupancy grid) from the topic.")
+            # reshape the message vector back into a map
+            self.map_np = np.asarray(msg.data, dtype=np.int8).reshape(msg.info.height, msg.info.width)
+            # fix the direction of Y (origin at top for OpenCV, origin at bottom for ROS2)
+            self.map_np = np.flipud(self.map_np)
+            # change the colors so they match with the .pgm image
+            self.map_np[self.map_np==0] = 127
+            self.map_np[self.map_np==100] = 0
+            # load the map parameters
+            self.map_data["map_load_time"]=msg.info.map_load_time
+            self.map_data["resolution"]=msg.info.resolution
+            self.map_data["width"]=msg.info.width
+            self.map_data["height"]=msg.info.height
+            quat_list = [msg.info.origin.orientation.x,
+                        msg.info.origin.orientation.y,
+                        msg.info.origin.orientation.z,
+                        msg.info.origin.orientation.w]
+            self.map_data["origin"]=[msg.info.origin.position.x,
+                                    msg.info.origin.position.y,
+                                    tf_transformations.euler_from_quaternion(quat_list)[-1]]
+            #self.get_logger().info(f"Read a new Map (Occupancy grid) from the topic.")
 
     def goToPose(self, pose, behavior_tree=''):
         """Send a `NavToPose` action request."""
