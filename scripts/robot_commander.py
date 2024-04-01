@@ -75,6 +75,7 @@ amcl_pose_qos = QoSProfile(
           history=QoSHistoryPolicy.KEEP_LAST,
           depth=1)
 
+
 qos_profile = amcl_pose_qos
 # qos_profile = QoSProfile(
 #           durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
@@ -82,6 +83,11 @@ qos_profile = amcl_pose_qos
 #           history=QoSHistoryPolicy.KEEP_LAST,
 #           depth=1)
 
+best_effort_qos = QoSProfile(
+          durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+          reliability=QoSReliabilityPolicy.BEST_EFFORT,
+          history=QoSHistoryPolicy.KEEP_LAST,
+          depth=1)
 
 
 
@@ -233,7 +239,6 @@ class RobotCommander(Node):
         self.initial_pose_received = False
         self.is_docked = None
 
-        map_topic = "/map"
 
         self.map_np = None
         self.map_data = {"map_load_time":None,
@@ -243,12 +248,21 @@ class RobotCommander(Node):
                          "origin":None} # origin will be in the format [x,y,theta]
         
 
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+
+
+        # # rc.point_hash(point) to point_in_map_frame. This way we don't duplicate points.
+        # self.detected_faces = {}
         
+        # self.face_marker_sub = self.create_subscription(Marker, "/people_marker", self.face_detect_callback, QoSReliabilityPolicy.BEST_EFFORT)
+
+
 
 
         # ROS2 subscribers
-        self.occupancy_grid_sub = self.create_subscription(OccupancyGrid, map_topic, self.map_callback, qos_profile)
-        
+        self.occupancy_grid_sub = self.create_subscription(OccupancyGrid, "/map", self.map_callback, qos_profile)
+
         self.create_subscription(DockStatus,
                                  'dock_status',
                                  self._dockCallback,
@@ -304,6 +318,44 @@ class RobotCommander(Node):
         return x, y
 
 
+    """
+        def point_hash(self, point, decimal_accuracy=100):
+            return (point.point.x * decimal_accuracy // 10,  point.point.y * decimal_accuracy // 10)
+
+        def face_detect_callback(self, msg):
+
+            time_of_detect = msg.header.stamp
+            # frame_id = msg.header.frame_id
+            location = msg.pose
+
+
+            timeout = rclpyDuration(seconds=0.1)
+            try:
+                # An example of how you can get a transform from /base_link frame to the /map frame
+                # as it is at time_now, wait for timeout for it to become available
+                trans = self.tf_buffer.lookup_transform("map", "base_link", time_of_detect, timeout)
+                self.get_logger().info(f"Looks like the transform is available.")
+
+                # Now we apply the transform to transform the point_in_robot_frame to the map frame
+                # The header in the result will be copied from the Header of the transform
+                point_in_map_frame = tfg.do_transform_point(location, trans)
+                self.get_logger().info(f"We transformed a PointStamped!")
+
+                curr_hash = self.point_hash(point_in_map_frame)
+
+                # print(self.detected_faces)
+                self.get_logger().info(self.detected_faces)
+
+                # If the hash is not in keys yet, we add the pair to the dict.
+                if not curr_hash in self.detected_faces:
+                    self.detected_faces[curr_hash] = point_in_map_frame
+
+
+            except TransformException as te:
+                self.get_logger().info(f"Cound not get the transform: {te}")
+    """
+
+
 
     def map_callback(self, msg):
             self.get_logger().info(f"Read a new Map (Occupancy grid) from the topic.")
@@ -329,6 +381,72 @@ class RobotCommander(Node):
             #self.get_logger().info(f"Read a new Map (Occupancy grid) from the topic.")
 
 
+
+
+    def get_curr_pos(self):
+            # Create a PointStamped in the /base_link frame of the robot
+            # The point is located 0.5m in from of the robot
+            # "Stamped" means that the message type contains a Header
+            point_in_robot_frame = PointStamped()
+            point_in_robot_frame.header.frame_id = "/base_link"
+            point_in_robot_frame.header.stamp = self.get_clock().now().to_msg()
+
+            point_in_robot_frame.point.x = 0.
+            point_in_robot_frame.point.y = 0.
+            point_in_robot_frame.point.z = 0.
+
+            # Now we look up the transform between the base_link and the map frames
+            # and then we apply it to our PointStamped
+
+
+            time_now = rclpy.time.Time()
+            timeout =rclpyDuration(seconds=0.1)
+            try:
+                # An example of how you can get a transform from /base_link frame to the /map frame
+                # as it is at time_now, wait for timeout for it to become available
+                trans = self.tf_buffer.lookup_transform("map", "base_link", time_now, timeout)
+                self.get_logger().info(f"Looks like the transform is available.")
+
+                # Now we apply the transform to transform the point_in_robot_frame to the map frame
+                # The header in the result will be copied from the Header of the transform
+                point_in_map_frame = tfg.do_transform_point(point_in_robot_frame, trans)
+                self.get_logger().info(f"We transformed a PointStamped!")
+
+                return point_in_map_frame
+
+
+            except TransformException as te:
+                self.get_logger().info(f"Cound not get the transform: {te}")
+    
+
+    def create_marker(self, point_stamped, marker_id):
+        """You can see the description of the Marker message here: https://docs.ros2.org/galactic/api/visualization_msgs/msg/Marker.html"""
+        marker = Marker()
+
+        marker.header = point_stamped.header
+
+        marker.type = marker.CUBE
+        marker.action = marker.ADD
+        marker.id = marker_id
+
+        # Set the scale of the marker
+        scale = 0.15
+        marker.scale.x = scale
+        marker.scale.y = scale
+        marker.scale.z = scale
+
+        # Set the color
+        marker.color.r = 1.0
+        marker.color.g = 0.0
+        marker.color.b = 0.0
+        marker.color.a = 1.0
+
+        # Set the pose of the marker
+        marker.pose.position.x = point_stamped.point.x
+        marker.pose.position.y = point_stamped.point.y
+        marker.pose.position.z = point_stamped.point.z
+
+        return marker
 
     def make_cv2_window(self):
         cv2.namedWindow("Just for showing what is in rc.map_np", cv2.WINDOW_NORMAL)
@@ -786,10 +904,17 @@ def main(args=None):
     add_to_navigation_ix = 0
 
     while len(navigation_list) > 0:
+
         
 
-        # Printing if the goal was added on the initioal list.
+        # Printing the name of the goal if the goal was added on the initial list.
         if add_to_navigation_ix < len(add_to_navigation):
+            
+            # # Tole se izkaze, da je ekstremno off. Ali je nekaj narobe, ali pa morda
+            # # preredko dobivamo update na pozicijo in je ta point nekoliko star.
+            # print(rc.get_curr_pos())
+            
+            
             print(add_to_navigation[add_to_navigation_ix])
             add_to_navigation_ix += 1
 
