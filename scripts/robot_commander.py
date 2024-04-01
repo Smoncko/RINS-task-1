@@ -117,6 +117,11 @@ class RobotCommander(Node):
         self.initial_pose_received = False
         self.is_docked = None
 
+        self.last_destination_goal = ("go", (0.0, 0.0, 0.57))
+        self.hello_dist = 0.3
+        self.navigation_list = []
+        self.just_canceled = False
+
 
         self.map_np = None
         self.map_data = {"map_load_time":None,
@@ -151,6 +156,11 @@ class RobotCommander(Node):
                                                               self._amclPoseCallback,
                                                               amcl_pose_qos)
         
+
+        self.face_sub = self.create_subscription(Marker, "/detected_faces", self.face_detected_callback, QoSReliabilityPolicy.BEST_EFFORT)
+
+
+
         # ROS2 publishers
         self.initial_pose_pub = self.create_publisher(PoseWithCovarianceStamped,
                                                       'initialpose',
@@ -232,6 +242,34 @@ class RobotCommander(Node):
             except TransformException as te:
                 self.get_logger().info(f"Cound not get the transform: {te}")
     """
+
+    def face_detected_callback(self, msg):
+        
+        self.info("Face detected!")
+
+        face_location = np.array([msg.pose.position.x, msg.pose.position.y])
+
+        curr_pos = self.get_curr_pos()  
+        curr_pos_location = np.array([curr_pos.point.x, curr_pos.point.y])
+
+        vec_to_face_normed = face_location - curr_pos_location
+        vec_to_face_normed /= np.linalg.norm(vec_to_face_normed)
+
+        face_goal_location = face_location - self.hello_dist * vec_to_face_normed
+
+        fi = np.arctan2(vec_to_face_normed[1], vec_to_face_normed[0])
+
+        add_to_navigation = [
+            ("go", (face_goal_location[0], face_goal_location[1], fi)),
+            ("go", (face_goal_location[0], face_goal_location[1], fi)),
+            ("say_hi", 0),
+            self.last_destination_goal
+        ]
+
+        self.prepend_to_nav_list(add_to_navigation, spin_full_after_go=False)
+
+        self.cancelTask()
+
 
 
 
@@ -359,6 +397,68 @@ class RobotCommander(Node):
         self.result_future = self.goal_handle.get_result_async()
         return True
 
+
+    def cancelTask(self):
+        """Cancel pending task request of any type."""
+        self.info('Canceling current task.')
+        if self.result_future:
+            # print("here")
+            future = self.goal_handle.cancel_goal_async()
+            # print("here")
+            # rclpy.spin_until_future_complete(self, future)
+            # print("here")
+        return
+
+
+
+
+    # def go_to_pose(self, pose):
+    #     """Send a `NavToPose` action request."""
+    #     self.currently_navigating = True
+    #     self.pending_goal = False
+
+    #     while not self.nav_to_pose_client.wait_for_server(timeout_sec=1.0):
+    #         self.get_logger().info("'NavigateToPose' action server not available, waiting...")
+
+    #     goal_msg = NavigateToPose.Goal()
+    #     goal_msg.pose = pose
+    #     goal_msg.behavior_tree = ""
+
+    #     self.get_logger().info('Attempting to navigate to goal: ' + str(pose.pose.position.x) + ' ' + str(pose.pose.position.y) + '...')
+    #     self.send_goal_future = self.nav_to_pose_client.send_goal_async(goal_msg)
+        
+    #     # Call this function when the Action Server accepts or rejects a goal
+    #     self.send_goal_future.add_done_callback(self.goal_accepted_callback)
+
+    # def goal_accepted_callback(self, future):
+    #     """Here we do something, depending on whether the ActionServer ACCEPTED our goal"""
+    #     goal_handle = future.result()
+
+    #     # If the goal was accepted
+    #     if goal_handle.accepted: 
+    #         self.get_logger().info('Goal was accepted!')
+    #         # Set the correct flags
+    #         self.currently_navigating = True
+    #         self.pending_goal = False
+    #         # Set the Future object, and callback function for reading the result of the action
+    #         self.result_future = goal_handle.get_result_async()
+    #         self.result_future.add_done_callback(self.get_result_callback)
+    #     elif not goal_handle.accepted:
+    #         self.get_logger().error('Goal was rejected!')
+
+    # def get_result_callback(self, future):
+    #     """Here we do something, depending on whether the ActionServer has REACHED our goal"""
+    #     status = future.result().status
+    #     if status != GoalStatus.STATUS_SUCCEEDED:
+    #         self.get_logger().info(f'Goal failed with status code: {status}')
+    #     else:
+    #         self.get_logger().info(f'Goal reached (according to Nav2).')
+
+    #     self.currently_navigating = False
+    #     self.pending_goal = False
+
+
+
     def spin(self, spin_dist=1.57, time_allowance=10):
         self.debug("Waiting for 'Spin' action server")
         while not self.spin_client.wait_for_server(timeout_sec=1.0):
@@ -426,16 +526,13 @@ class RobotCommander(Node):
         self.info('Undock succeeded')
         return True
 
-    def cancelTask(self):
-        """Cancel pending task request of any type."""
-        self.info('Canceling current task.')
-        if self.result_future:
-            future = self.goal_handle.cancel_goal_async()
-            rclpy.spin_until_future_complete(self, future)
-        return
+    
+
 
     def isTaskComplete(self):
         """Check if the task request of any type is complete yet."""
+
+        # self.info('Checking if task is complete')
         if not self.result_future:
             # task was cancelled or completed
             return True
@@ -543,30 +640,43 @@ class RobotCommander(Node):
         return
 
 
+    def get_pose_obj(self, x, y, fi):
+
+        goal_pose = PoseStamped()
+        goal_pose.header.frame_id = 'map'
+        goal_pose.header.stamp = self.get_clock().now().to_msg()
+
+        goal_pose.pose.position.x = x
+        goal_pose.pose.position.y = y
+        goal_pose.pose.orientation = self.YawToQuaternion(fi)
+
+        return goal_pose
+    
+
+    def add_to_nav_list(self, to_add_list, spin_full_after_go=False):
+
+        for tup in to_add_list:
+            if tup[0] == "go":
+                self.navigation_list.append(("go", self.get_pose_obj(*tup[1]), tup[1]))
+                if spin_full_after_go:
+                    self.navigation_list.append(("spin", 3.14, None))
+            elif tup[0] == "spin":
+                self.navigation_list.append(("spin", tup[1], None))
+            elif tup[0] == "say_hi":
+                self.navigation_list.append(("say_hi", None, None))
 
 
-def get_pose_obj(x, y, fi, rc):
+    def prepend_to_nav_list(self, to_add_list, spin_full_after_go=False):
 
-    goal_pose = PoseStamped()
-    goal_pose.header.frame_id = 'map'
-    goal_pose.header.stamp = rc.get_clock().now().to_msg()
-
-    goal_pose.pose.position.x = x
-    goal_pose.pose.position.y = y
-    goal_pose.pose.orientation = rc.YawToQuaternion(fi)
-
-    return goal_pose
-
-def add_to_nav_list(to_add_list, nav_list, rc, spin_full_after_go=False):
-
-    for tup in to_add_list:
-        if tup[0] == "go":
-            to_add = (*tup[1], rc)
-            nav_list.append(("go", get_pose_obj(*to_add)))
-            if spin_full_after_go:
-                nav_list.append(("spin", 3.14))
-        elif tup[0] == "spin":
-            nav_list.append(("spin", tup[1]))
+        for tup in reversed(to_add_list):
+            if tup[0] == "go":
+                self.navigation_list.insert(0, ("go", self.get_pose_obj(*tup[1]), tup[1]))
+                if spin_full_after_go:
+                    self.navigation_list.insert(0, ("spin", 3.14, None))
+            elif tup[0] == "spin":
+                self.navigation_list.insert(0, ("spin", tup[1], None))
+            elif tup[0] == "say_hi":
+                self.navigation_list.insert(0, ("say_hi", None, None))
 
 def say_hi():
 
@@ -628,7 +738,7 @@ def main(args=None):
 
     # contains tuples of two types:
     # ("go", <PoseStamped object>), ("spin", angle_to_spin_to)
-    navigation_list = []
+    
 
     
 
@@ -689,7 +799,7 @@ def main(args=None):
 
 
 
-    add_to_nav_list(add_to_navigation, navigation_list, rc, spin_full_after_go=False)
+    rc.add_to_nav_list(add_to_navigation, spin_full_after_go=False)
 
 
 
@@ -725,50 +835,50 @@ def main(args=None):
         # 1.5, 2.9
         # 2,3
         # Down right
-        navigation_list.append(("go", get_pose_obj(-1.0, 0.25, 0.57, rc)))
-        navigation_list.append(("go", get_pose_obj(-1.6, 0.7, 0.57, rc)))
-        navigation_list.append(("go", get_pose_obj(-0.4, -0.6, 0.57, rc)))
-        navigation_list.append(("go", get_pose_obj(-0.3, -1.85, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(-1.0, 0.25, 0.57)))
+        navigation_list.append(("go", get_pose_obj(-1.6, 0.7, 0.57)))
+        navigation_list.append(("go", get_pose_obj(-0.4, -0.6, 0.57)))
+        navigation_list.append(("go", get_pose_obj(-0.3, -1.85, 0.57)))
 
         # Right
-        navigation_list.append(("go", get_pose_obj(1.0, -1.9, 0.57, rc)))
-        navigation_list.append(("go", get_pose_obj(2.2, -2.0, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(1.0, -1.9, 0.57)))
+        navigation_list.append(("go", get_pose_obj(2.2, -2.0, 0.57)))
 
         # Right up
-        navigation_list.append(("go", get_pose_obj(3.4, -1.3, 0.57, rc)))
-        navigation_list.append(("go", get_pose_obj(2.0, -1.0, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(3.4, -1.3, 0.57)))
+        navigation_list.append(("go", get_pose_obj(2.0, -1.0, 0.57)))
 
         # Centre up
-        navigation_list.append(("go", get_pose_obj(1.5, 0.0, 0.57, rc)))
-        navigation_list.append(("go", get_pose_obj(1.0, 0.0, 0.57, rc)))
-        navigation_list.append(("go", get_pose_obj(2.5, 1.0, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(1.5, 0.0, 0.57)))
+        navigation_list.append(("go", get_pose_obj(1.0, 0.0, 0.57)))
+        navigation_list.append(("go", get_pose_obj(2.5, 1.0, 0.57)))
 
         # Slightly left slightly up
-        navigation_list.append(("go", get_pose_obj(1.5, 2.0, 0.57, rc)))
-        navigation_list.append(("go", get_pose_obj(1.0,1.0, 0.57, rc)))
-        navigation_list.append(("go", get_pose_obj(1.0,2.0, 0.57, rc)))
-        navigation_list.append(("go", get_pose_obj(0.0, 2.0, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(1.5, 2.0, 0.57)))
+        navigation_list.append(("go", get_pose_obj(1.0,1.0, 0.57)))
+        navigation_list.append(("go", get_pose_obj(1.0,2.0, 0.57)))
+        navigation_list.append(("go", get_pose_obj(0.0, 2.0, 0.57)))
 
         # Slightly left slightly down
-        navigation_list.append(("go", get_pose_obj(-1.0, 1.0, 0.57, rc)))
-        navigation_list.append(("go", get_pose_obj(-1.75, 1.0, 0.57, rc)))
-        navigation_list.append(("go", get_pose_obj(-1.75, 2.0, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(-1.0, 1.0, 0.57)))
+        navigation_list.append(("go", get_pose_obj(-1.75, 1.0, 0.57)))
+        navigation_list.append(("go", get_pose_obj(-1.75, 2.0, 0.57)))
 
         # Left down
-        navigation_list.append(("go", get_pose_obj(-1.5, 4.5, 0.57, rc)))
-        navigation_list.append(("go", get_pose_obj(-1.0, 3.0, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(-1.5, 4.5, 0.57)))
+        navigation_list.append(("go", get_pose_obj(-1.0, 3.0, 0.57)))
 
         # Left corridor
-        navigation_list.append(("go", get_pose_obj(0.0, 3.2, 0.57, rc)))
-        navigation_list.append(("go", get_pose_obj(0.5, 2.8, 0.57, rc)))
-        navigation_list.append(("go", get_pose_obj(1.0, 3.5, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(0.0, 3.2, 0.57)))
+        navigation_list.append(("go", get_pose_obj(0.5, 2.8, 0.57)))
+        navigation_list.append(("go", get_pose_obj(1.0, 3.5, 0.57)))
 
         # Left up
-        navigation_list.append(("go", get_pose_obj(1.5, 2.9, 0.57, rc)))
-        navigation_list.append(("go", get_pose_obj(2.0,3.0, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(1.5, 2.9, 0.57)))
+        navigation_list.append(("go", get_pose_obj(2.0,3.0, 0.57)))
 
         # Back to slightly left slightly up
-        navigation_list.append(("go", get_pose_obj(1.5, 2.0, 0.57, rc)))
+        navigation_list.append(("go", get_pose_obj(1.5, 2.0, 0.57)))
     
        
     
@@ -785,38 +895,47 @@ def main(args=None):
     # rc.make_cv2_window()
     # rc.show_map()
 
-    add_to_navigation_ix = 0
+    # add_to_navigation_ix = 0
 
-    while len(navigation_list) > 0:
-
-
+    while len(rc.navigation_list) > 0:
 
 
 
-        # Printing the name of the goal if the goal was added on the initial list.
-        if add_to_navigation_ix < len(add_to_navigation):
+
+
+        # # Printing the name of the goal if the goal was added on the initial list.
+        # if add_to_navigation_ix < len(add_to_navigation):
             
-            # # Tole se izkaze, da je ekstremno off. Ali je nekaj narobe, ali pa morda
-            # # preredko dobivamo update na pozicijo in je ta point nekoliko star.
-            # print(rc.get_curr_pos())
+        #     # # Tole se izkaze, da je ekstremno off. Ali je nekaj narobe, ali pa morda
+        #     # # preredko dobivamo update na pozicijo in je ta point nekoliko star.
+        #     # print(rc.get_curr_pos())
             
             
-            print(add_to_navigation[add_to_navigation_ix])
-            add_to_navigation_ix += 1
+        #     print(add_to_navigation[add_to_navigation_ix])
+        #     add_to_navigation_ix += 1
 
 
-        curr_type, curr_goal = navigation_list[0]
+        curr_type, curr_goal, curr_goal_coordinates = rc.navigation_list[0]
         
         if curr_type == "go":
+            print(rc.navigation_list[0][0])
+            print(rc.navigation_list[0][2])
+            print(rc.navigation_list[1][0])
+            print(rc.navigation_list[1][2])
+
+            rc.last_destination_goal = (curr_type, curr_goal_coordinates)
             rc.goToPose(curr_goal)
         elif curr_type == "spin":
             rc.spin(curr_goal)
-        
-        while not rc.isTaskComplete():
+        elif curr_type == "say_hi":
+            print(rc.navigation_list[0][0])
+            print(rc.navigation_list[0][2])
+            print(rc.navigation_list[1][0])
+            print(rc.navigation_list[1][2])
 
-            # Canceling a task is simpler than expected:
-            if input() == "s":
-                rc.cancelTask()
+            say_hi()
+        
+        while not rc.just_canceled and not rc.isTaskComplete():
 
             # if mg.clicked or rc.stop_spin:
             #     rc.cancel_goal()
@@ -824,7 +943,9 @@ def main(args=None):
             rc.info("Waiting for the task to complete...")
             time.sleep(1)
         
-        del navigation_list[0]
+        rc.just_canceled = False
+        
+        del rc.navigation_list[0]
     
         # input("Enter sth to continue.")
         
