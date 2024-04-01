@@ -94,128 +94,6 @@ best_effort_qos = QoSProfile(
 
 
 
-class MapGoalsPossiblyUsefulFuncs(Node):
-    
-    def __init__(self):
-        super().__init__('map_goals')
-
-
-        # Functional variables
-        self.pending_goal = False
-        self.result_future = None
-        self.currently_navigating = False
-        self.clicked_x = None
-        self.clicked_y = None
-        self.ros_occupancy_grid = None
-
-        self.get_logger().info(f"Node has been initialized! Will perform the tasks.")
-
-
-    def generate_goal_message(self, x, y, theta=0.2):
-        goal_pose = PoseStamped()
-        goal_pose.header.frame_id = 'map'
-        goal_pose.header.stamp = self.get_clock().now().to_msg()
-
-        goal_pose.pose.position.x = x
-        goal_pose.pose.position.y = y
-        goal_pose.pose.orientation = self.yaw_to_quaternion(theta)
-
-        return goal_pose
-
-    """This is meant for self.map_np, which is the map in numpy format, as read from the topic "/map"."""
-    def map_pixel_to_world(self, x, y, theta=0):
-        ### Convert a pixel in an numpy image, to a real world location
-        ### Works only for theta=0
-        assert not self.map_data["resolution"] is None
-
-        # Apply resolution, change of origin, and translation
-        # 
-        world_x = x*self.map_data["resolution"] + self.map_data["origin"][0]
-        world_y = (self.map_data["height"]-y)*self.map_data["resolution"] + self.map_data["origin"][1]
-
-        # Apply rotation
-        return world_x, world_y
-
-    def world_to_map_pixel(self, world_x, world_y, world_theta=0.2):
-        ### Convert a real world location to a pixel in a numpy image
-        ### Works only for theta=0
-        assert self.map_data["resolution"] is not None
-
-        # Apply resolution, change of origin, and translation
-        # x is the first coordinate, which in opencv (numpy) that is the matrix row - vertical
-        x = int((world_x - self.map_data["origin"][0])/self.map_data["resolution"])
-        y = int(self.map_data["height"] - (world_y - self.map_data["origin"][1])/self.map_data["resolution"] )
-        
-        # Apply rotation
-        return x, y
-
-    def go_to_pose(self, pose):
-        """Send a `NavToPose` action request."""
-        self.currently_navigating = True
-        self.pending_goal = False
-
-        while not self.nav_to_pose_client.wait_for_server(timeout_sec=1.0):
-            self.get_logger().info("'NavigateToPose' action server not available, waiting...")
-
-        goal_msg = NavigateToPose.Goal()
-        goal_msg.pose = pose
-        goal_msg.behavior_tree = ""
-
-        self.get_logger().info('Attempting to navigate to goal: ' + str(pose.pose.position.x) + ' ' + str(pose.pose.position.y) + '...')
-        self.send_goal_future = self.nav_to_pose_client.send_goal_async(goal_msg)
-        
-        # Call this function when the Action Server accepts or rejects a goal
-        self.send_goal_future.add_done_callback(self.goal_accepted_callback)
-
-    def goal_accepted_callback(self, future):
-        """Here we do something, depending on whether the ActionServer ACCEPTED our goal"""
-        goal_handle = future.result()
-
-        # If the goal was accepted
-        if goal_handle.accepted: 
-            self.get_logger().info('Goal was accepted!')
-            # Set the correct flags
-            self.currently_navigating = True
-            self.pending_goal = False
-            # Set the Future object, and callback function for reading the result of the action
-            self.result_future = goal_handle.get_result_async()
-            self.result_future.add_done_callback(self.get_result_callback)
-        elif not goal_handle.accepted:
-            self.get_logger().error('Goal was rejected!')
-
-    def get_result_callback(self, future):
-        """Here we do something, depending on whether the ActionServer has REACHED our goal"""
-        status = future.result().status
-        if status != GoalStatus.STATUS_SUCCEEDED:
-            self.get_logger().info(f'Goal failed with status code: {status}')
-        else:
-            self.get_logger().info(f'Goal reached (according to Nav2).')
-
-        self.currently_navigating = False
-        self.pending_goal = False
-
-    def yaw_to_quaternion(self, angle_z = 0.):
-        quat_tf = quaternion_from_euler(0, 0, angle_z)
-
-        # Convert a list to geometry_msgs.msg.Quaternion
-        quat_msg = Quaternion(x=quat_tf[0], y=quat_tf[1], z=quat_tf[2], w=quat_tf[3]) # for tf_turtle
-
-        return quat_msg
-    
-    def get_rotation_matrix(self, theta):
-        c = np.cos(theta)
-        s = np.sin(theta)
-        rot = np.array([[c, -s],
-                        [s , c]])
-        return rot
-
-
-
-
-
-
-
-
 
 
 
@@ -469,6 +347,7 @@ class RobotCommander(Node):
                   str(pose.pose.position.y) + '...')
         send_goal_future = self.nav_to_pose_client.send_goal_async(goal_msg,
                                                                    self._feedbackCallback)
+        
         rclpy.spin_until_future_complete(self, send_goal_future)
         self.goal_handle = send_goal_future.result()
 
@@ -499,7 +378,9 @@ class RobotCommander(Node):
 
         self.result_future = self.goal_handle.get_result_async()
         return True
-    
+
+
+
     def undock(self):
         """Perform Undock action."""
         self.info('Undocking...')
@@ -708,12 +589,14 @@ def main(args=None):
 
     rclpy.init(args=args)
 
-    mg_fns = MapGoalsPossiblyUsefulFuncs()
+    # mg = MapGoals()
     # trans_points = TranformPoints()
     
     # say_hi()
+
     
     rc = RobotCommander()
+
 
     # Wait until Nav2 and Localizer are available
     rc.waitUntilNav2Active()
@@ -896,6 +779,7 @@ def main(args=None):
 
 
     
+        
 
 
     # rc.make_cv2_window()
@@ -905,7 +789,9 @@ def main(args=None):
 
     while len(navigation_list) > 0:
 
-        
+
+
+
 
         # Printing the name of the goal if the goal was added on the initial list.
         if add_to_navigation_ix < len(add_to_navigation):
@@ -927,6 +813,14 @@ def main(args=None):
             rc.spin(curr_goal)
         
         while not rc.isTaskComplete():
+
+            # Canceling a task is simpler than expected:
+            if input() == "s":
+                rc.cancelTask()
+
+            # if mg.clicked or rc.stop_spin:
+            #     rc.cancel_goal()
+
             rc.info("Waiting for the task to complete...")
             time.sleep(1)
         
