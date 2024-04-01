@@ -54,6 +54,10 @@ import tf_transformations
 import cv2
 import numpy as np
 
+from playsound import playsound
+from pydub import AudioSegment
+from pydub.playback import play
+
 
 
 
@@ -565,15 +569,31 @@ def add_to_nav_list(to_add_list, nav_list, rc, spin_full_after_go=False):
         elif tup[0] == "spin":
             nav_list.append(("spin", tup[1]))
 
+def say_hi():
+
+    playsound("src/RINS-task-1/voice/zivjo.mp3")
+
+    # zivjo = AudioSegment.from_wav("zivjo.m4a")
+
+    # audio = AudioSegment.from_file('/home/matevzvidovic/ros2_ws/src/RINS-task-1/voice/zivjo.mp3')
+    # play(audio)
+
+    # try:
+    #     playsound("./voice/zivjo.m4a")
+    # except:
+    #     print("Couldn't play the sound. Make sure you have the playsound library installed.")
 
 
 def main(args=None):
+
 
 
     rclpy.init(args=args)
 
     mg_fns = MapGoalsPossiblyUsefulFuncs()
     # trans_points = TranformPoints()
+    
+    # say_hi()
     
     rc = RobotCommander()
 
