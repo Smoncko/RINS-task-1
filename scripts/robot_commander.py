@@ -26,27 +26,19 @@ from nav2_msgs.action import Spin, NavigateToPose
 from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
 from nav_msgs.msg import OccupancyGrid
 # from tf_transformations import quaternion_from_euler
+# import tf_transformations
 
 from irobot_create_msgs.action import Dock, Undock
 from irobot_create_msgs.msg import DockStatus
 
-<<<<<<< HEAD
-import tf_transformations
-
-from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
-
-import numpy as np
-=======
 import tf2_geometry_msgs as tfg
 from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
->>>>>>> d958c6e22a1f343ff23618b46d762c3998d354b4
 
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.duration import Duration as rclpyDuration
-from rclpy.duration import Duration
 from rclpy.node import Node
 
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy
@@ -62,15 +54,51 @@ import tf_transformations
 import cv2
 import numpy as np
 
-qos_profile = QoSProfile(
+
+
+
+class TaskResult(Enum):
+    UNKNOWN = 0
+    SUCCEEDED = 1
+    CANCELED = 2
+    FAILED = 3
+
+
+
+amcl_pose_qos = QoSProfile(
           durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
           reliability=QoSReliabilityPolicy.RELIABLE,
           history=QoSHistoryPolicy.KEEP_LAST,
           depth=1)
 
+qos_profile = amcl_pose_qos
+# qos_profile = QoSProfile(
+#           durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+#           reliability=QoSReliabilityPolicy.RELIABLE,
+#           history=QoSHistoryPolicy.KEEP_LAST,
+#           depth=1)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class MapGoals(Node):
     """Demonstrating some convertions and loading the map as an image"""
     def __init__(self):
+
+        # self.map_goals = self.create_subscription(PointStamped, "/map_goals", self.map_goals_callback, qos_profile)
+
         super().__init__('map_goals')
 
         # Basic ROS stuff
@@ -265,32 +293,8 @@ class MapGoals(Node):
 
 
 
-class TaskResult(Enum):
-    UNKNOWN = 0
-    SUCCEEDED = 1
-    CANCELED = 2
-    FAILED = 3
 
-amcl_pose_qos = QoSProfile(
-          durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-          reliability=QoSReliabilityPolicy.RELIABLE,
-          history=QoSHistoryPolicy.KEEP_LAST,
-          depth=1)
 
-<<<<<<< HEAD
-qos_profile = QoSProfile(
-          durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-          reliability=QoSReliabilityPolicy.RELIABLE,
-          history=QoSHistoryPolicy.KEEP_LAST,
-          depth=1)
-=======
-
-qos_profile = amcl_pose_qos
-# qos_profile = QoSProfile(
-#           durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-#           reliability=QoSReliabilityPolicy.RELIABLE,
-#           history=QoSHistoryPolicy.KEEP_LAST,
-#           depth=1)
 
 
 
@@ -334,7 +338,7 @@ class TranformPoints(Node):
         # Now we look up the transform between the base_link and the map frames
         # and then we apply it to our PointStamped
         time_now = rclpy.time.Time()
-        timeout = Duration(seconds=0.1)
+        timeout = rclpyDuration(seconds=0.1)
         try:
             # An example of how you can get a transform from /base_link frame to the /map frame
             # as it is at time_now, wait for timeout for it to become available
@@ -394,7 +398,6 @@ class TranformPoints(Node):
 
 
 
->>>>>>> d958c6e22a1f343ff23618b46d762c3998d354b4
 
 class RobotCommander(Node):
 
@@ -739,11 +742,11 @@ def add_to_nav_list(to_add_list, nav_list, rc, spin_full_after_go=False):
 def main(args=None):
 
 
-    trans_points = TranformPoints()
+    rclpy.init(args=args)
 
     map_goals = MapGoals()
+    trans_points = TranformPoints()
     
-    rclpy.init(args=args)
     rc = RobotCommander()
 
     # Wait until Nav2 and Localizer are available
