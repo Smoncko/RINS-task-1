@@ -1,13 +1,10 @@
 # RINS-task-1
 
+## DONE:
+- osnovna navigacija po mapi (robot_commander.py)
+- zaznavanje obrazov (detect_people.py in transform_point.py), markerji publishani na topic /detected_faces
 
-
-## Pomembno:
-### 
-- sprejemanje slik med vožnjo in uporaba detected_faces.py zadeve, da zazna obraz na sliki in nam da njegovo lokacijo (pomoje je rešitev kar subscription na detect_faces.py in potem pretvorba tega v usable koordinate - nisem pa si dovolj pogledal)
-- postavit marker tja al nekaj takega - pač zapomknit si, kje je (transform_points.py zgled)
-
-- it pred ta marker (prepend v navigation_list)
+## TO-DO:
 - obrnit se proti sliki (glede na našo lokacijo in lokacijso slike izračunamo spin. Prepend tega cilja v navigation list.)
 - rečt živjo
 - iti nazaj na zadnji goal na poti, ki smo ga preden smo šli do slike še imeli.
