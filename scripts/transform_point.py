@@ -23,7 +23,7 @@ qos_profile = QoSProfile(
           history=QoSHistoryPolicy.KEEP_LAST,
           depth=1)
 
-class TranformPoints(Node):
+class TransformPoints(Node):
     """Demonstrating some convertions and loading the map as an image"""
     def __init__(self):
         super().__init__('map_goals')
@@ -65,7 +65,7 @@ class TranformPoints(Node):
     def new(self, marker):
         # check if marker is far enough from the already detected faces
         for face in self.detected_faces:
-            if self.distance(marker, face) < 1:
+            if self.distance(marker, face) < 1.:
                 return False
             
         self.detected_faces.append(marker)
@@ -92,29 +92,33 @@ class TranformPoints(Node):
             # An example of how you can get a transform from /base_link frame to the /map frame
             # as it is at time_now, wait for timeout for it to become available
             trans = self.tf_buffer.lookup_transform("map", "base_link", time_now, timeout)
-            self.get_logger().info(f"Looks like the transform is available.")
+            #self.get_logger().info(f"Looks like the transform is available.")
 
             # Now we apply the transform to transform the point_in_robot_frame to the map frame
             # The header in the result will be copied from the Header of the transform
             point_in_map_frame = tfg.do_transform_point(point_in_robot_frame, trans)
-            self.get_logger().info(f"We transformed a PointStamped!")
+            #self.get_logger().info(f"We transformed a PointStamped!")
 
             # If the transformation exists, create a marker from the point, in order to visualize it in Rviz
             marker_in_map_frame = self.create_marker(point_in_map_frame, self.marker_id)
 
             # check if face already detected
-            if self.new(marker):
+            if self.new(marker_in_map_frame):
 
                 # Publish the marker
                 self.marker_pub.publish(marker_in_map_frame)
                 self.get_logger().info(f"The marker has been published to /breadcrumbs. You are able to visualize it in Rviz")
-                self.get_logger().info(f"x: {marker_in_map_frame.pose.position.x}, y: {marker_in_map_frame.pose.position.y}, z: {marker_in_map_frame.pose.position.z}")
+                #self.get_logger().info(f"x: {marker_in_map_frame.pose.position.x}, y: {marker_in_map_frame.pose.position.y}, z: {marker_in_map_frame.pose.position.z}")
+                
+                for face in self.detected_faces:
+                    self.get_logger().info(f"x: {face.pose.position.x}, y: {face.pose.position.y}, z: {face.pose.position.z}")
 
                 # Increase the marker_id, so we dont overwrite the same marker.
                 self.marker_id += 1
 
             else:
-                self.get_logger().info(f"Face has already been detected")
+                f = 1
+                #self.get_logger().info(f"Face has already been detected")
 
         except TransformException as te:
             self.get_logger().info(f"Cound not get the transform: {te}")
@@ -194,7 +198,7 @@ class TranformPoints(Node):
 def main():
 
     rclpy.init(args=None)
-    node = TranformPoints()
+    node = TransformPoints()
     
     rclpy.spin(node)
     
