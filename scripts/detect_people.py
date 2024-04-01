@@ -29,7 +29,7 @@ class detect_faces(Node):
 				('device', ''),
 		])
 
-		marker_topic = "/people_marker"
+		marker_topic = "/potential_faces"
 
 		self.detection_color = (0,0,255)
 		self.device = self.get_parameter('device').get_parameter_value().string_value
@@ -135,7 +135,7 @@ class detect_faces(Node):
 			marker.pose.position.z = float(d[2])
 
 			self.marker_pub.publish(marker)
-
+			
 def main():
 	print('Face detection node starting.')
 
