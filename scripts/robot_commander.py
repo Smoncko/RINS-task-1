@@ -25,8 +25,6 @@ from nav_msgs.msg import OccupancyGrid
 from nav2_msgs.action import Spin, NavigateToPose
 from turtle_tf2_py.turtle_tf2_broadcaster import quaternion_from_euler
 from nav_msgs.msg import OccupancyGrid
-# from tf_transformations import quaternion_from_euler
-# import tf_transformations
 
 from irobot_create_msgs.action import Dock, Undock
 from irobot_create_msgs.msg import DockStatus
@@ -68,7 +66,6 @@ class TaskResult(Enum):
     FAILED = 3
 
 
-
 amcl_pose_qos = QoSProfile(
           durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
           reliability=QoSReliabilityPolicy.RELIABLE,
@@ -77,29 +74,6 @@ amcl_pose_qos = QoSProfile(
 
 
 qos_profile = amcl_pose_qos
-# qos_profile = QoSProfile(
-#           durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-#           reliability=QoSReliabilityPolicy.RELIABLE,
-#           history=QoSHistoryPolicy.KEEP_LAST,
-#           depth=1)
-
-best_effort_qos = QoSProfile(
-          durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-          reliability=QoSReliabilityPolicy.BEST_EFFORT,
-          history=QoSHistoryPolicy.KEEP_LAST,
-          depth=1)
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -141,8 +115,6 @@ class RobotCommander(Node):
         # self.face_marker_sub = self.create_subscription(Marker, "/people_marker", self.face_detect_callback, QoSReliabilityPolicy.BEST_EFFORT)
 
 
-
-
         # ROS2 subscribers
         self.occupancy_grid_sub = self.create_subscription(OccupancyGrid, "/map", self.map_callback, qos_profile)
 
@@ -158,7 +130,6 @@ class RobotCommander(Node):
         
 
         self.face_sub = self.create_subscription(Marker, "/detected_faces", self.face_detected_callback, QoSReliabilityPolicy.BEST_EFFORT)
-
 
 
         # ROS2 publishers
@@ -204,44 +175,7 @@ class RobotCommander(Node):
         
         # Apply rotation
         return x, y
-
-
-    """
-        def point_hash(self, point, decimal_accuracy=100):
-            return (point.point.x * decimal_accuracy // 10,  point.point.y * decimal_accuracy // 10)
-
-        def face_detect_callback(self, msg):
-
-            time_of_detect = msg.header.stamp
-            # frame_id = msg.header.frame_id
-            location = msg.pose
-
-
-            timeout = rclpyDuration(seconds=0.1)
-            try:
-                # An example of how you can get a transform from /base_link frame to the /map frame
-                # as it is at time_now, wait for timeout for it to become available
-                trans = self.tf_buffer.lookup_transform("map", "base_link", time_of_detect, timeout)
-                self.get_logger().info(f"Looks like the transform is available.")
-
-                # Now we apply the transform to transform the point_in_robot_frame to the map frame
-                # The header in the result will be copied from the Header of the transform
-                point_in_map_frame = tfg.do_transform_point(location, trans)
-                self.get_logger().info(f"We transformed a PointStamped!")
-
-                curr_hash = self.point_hash(point_in_map_frame)
-
-                # print(self.detected_faces)
-                self.get_logger().info(self.detected_faces)
-
-                # If the hash is not in keys yet, we add the pair to the dict.
-                if not curr_hash in self.detected_faces:
-                    self.detected_faces[curr_hash] = point_in_map_frame
-
-
-            except TransformException as te:
-                self.get_logger().info(f"Cound not get the transform: {te}")
-    """
+    
 
     def face_detected_callback(self, msg):
         
@@ -270,9 +204,6 @@ class RobotCommander(Node):
 
         self.cancelTask()
 
-
-
-
     def map_callback(self, msg):
             self.get_logger().info(f"Read a new Map (Occupancy grid) from the topic.")
             # reshape the message vector back into a map
@@ -295,8 +226,6 @@ class RobotCommander(Node):
                                     msg.info.origin.position.y,
                                     tf_transformations.euler_from_quaternion(quat_list)[-1]]
             #self.get_logger().info(f"Read a new Map (Occupancy grid) from the topic.")
-
-
 
 
     def get_curr_pos(self):
@@ -410,55 +339,6 @@ class RobotCommander(Node):
         return
 
 
-
-
-    # def go_to_pose(self, pose):
-    #     """Send a `NavToPose` action request."""
-    #     self.currently_navigating = True
-    #     self.pending_goal = False
-
-    #     while not self.nav_to_pose_client.wait_for_server(timeout_sec=1.0):
-    #         self.get_logger().info("'NavigateToPose' action server not available, waiting...")
-
-    #     goal_msg = NavigateToPose.Goal()
-    #     goal_msg.pose = pose
-    #     goal_msg.behavior_tree = ""
-
-    #     self.get_logger().info('Attempting to navigate to goal: ' + str(pose.pose.position.x) + ' ' + str(pose.pose.position.y) + '...')
-    #     self.send_goal_future = self.nav_to_pose_client.send_goal_async(goal_msg)
-        
-    #     # Call this function when the Action Server accepts or rejects a goal
-    #     self.send_goal_future.add_done_callback(self.goal_accepted_callback)
-
-    # def goal_accepted_callback(self, future):
-    #     """Here we do something, depending on whether the ActionServer ACCEPTED our goal"""
-    #     goal_handle = future.result()
-
-    #     # If the goal was accepted
-    #     if goal_handle.accepted: 
-    #         self.get_logger().info('Goal was accepted!')
-    #         # Set the correct flags
-    #         self.currently_navigating = True
-    #         self.pending_goal = False
-    #         # Set the Future object, and callback function for reading the result of the action
-    #         self.result_future = goal_handle.get_result_async()
-    #         self.result_future.add_done_callback(self.get_result_callback)
-    #     elif not goal_handle.accepted:
-    #         self.get_logger().error('Goal was rejected!')
-
-    # def get_result_callback(self, future):
-    #     """Here we do something, depending on whether the ActionServer has REACHED our goal"""
-    #     status = future.result().status
-    #     if status != GoalStatus.STATUS_SUCCEEDED:
-    #         self.get_logger().info(f'Goal failed with status code: {status}')
-    #     else:
-    #         self.get_logger().info(f'Goal reached (according to Nav2).')
-
-    #     self.currently_navigating = False
-    #     self.pending_goal = False
-
-
-
     def spin(self, spin_dist=1.57, time_allowance=10):
         self.debug("Waiting for 'Spin' action server")
         while not self.spin_client.wait_for_server(timeout_sec=1.0):
@@ -525,9 +405,6 @@ class RobotCommander(Node):
 
         self.info('Undock succeeded')
         return True
-
-    
-
 
     def isTaskComplete(self):
         """Check if the task request of any type is complete yet."""
@@ -679,34 +556,14 @@ class RobotCommander(Node):
                 self.navigation_list.insert(0, ("say_hi", None, None))
 
 def say_hi():
-
     playsound("src/RINS-task-1/voice/zivjo.mp3")
-
-    # zivjo = AudioSegment.from_wav("zivjo.m4a")
-
-    # audio = AudioSegment.from_file('/home/matevzvidovic/ros2_ws/src/RINS-task-1/voice/zivjo.mp3')
-    # play(audio)
-
-    # try:
-    #     playsound("./voice/zivjo.m4a")
-    # except:
-    #     print("Couldn't play the sound. Make sure you have the playsound library installed.")
 
 
 def main(args=None):
 
-
-
     rclpy.init(args=args)
 
-    # mg = MapGoals()
-    # trans_points = TranformPoints()
-    
-    # say_hi()
-
-    
     rc = RobotCommander()
-
 
     # Wait until Nav2 and Localizer are available
     rc.waitUntilNav2Active()
@@ -719,10 +576,6 @@ def main(args=None):
     if rc.is_docked:
         rc.undock()
     
-
-
-
-
     # The mesh in rviz is coordinates.
     # The docking station is 0,0
     # Use Publish Point to hover and see the coordinates.
@@ -730,21 +583,13 @@ def main(args=None):
     # y: -2.5 to 5
         
 
-    
-
-
-
-
-
-    # contains tuples of two types:
-    # ("go", <PoseStamped object>), ("spin", angle_to_spin_to)
-    
-
+    # contains tuples of three types:
+    # ("go", <PoseStamped object>), ("spin", angle_to_spin_by), ("say_hi", None)
     
 
     add_to_navigation = [
         
-        # spin spins the robot in place for fi. It doesn't orient it to fi.
+        # Spin spins the robot in place for phi in radians. It doesn't orient it to phi.
         ("spin", 3.14),
         
         # Starting point
@@ -769,13 +614,13 @@ def main(args=None):
         ("go", (1.0, 0.0, 0.57)),
         ("go", (2.5, 1.0, 0.57)),
 
-        # Slightly left slightly up
+        # Slightly left, slightly up
         ("go", (1.5, 2.0, 0.57)),
         ("go", (1.0,1.0, 0.57)),
         ("go", (1.0,2.0, 0.57)),
         ("go", (0.0, 2.0, 0.57)),
 
-        # Slightly left slightly down
+        # Slightly left, slightly down
         ("go", (-1.0, 1.0, 0.57)),
         ("go", (-1.75, 1.0, 0.57)),
         ("go", (-1.75, 2.0, 0.57)),
@@ -793,127 +638,15 @@ def main(args=None):
         ("go", (1.5, 2.9, 0.57)),
         ("go", (2.0,3.0, 0.57)),
 
-        # Back to slightly left slightly up
+        # Back to slightly left, slightly up
         ("go", (1.5, 2.0, 0.57)),
     ]
-
-
 
     rc.add_to_nav_list(add_to_navigation, spin_full_after_go=False)
 
 
 
-
-
-
-    # Old way of doing it:
-    if False:
-        # Path:
-        # -1, 0.25
-        # -1.6, 0.7
-        # -0.4, -0.6
-        # -0.3, -1.85
-        # 1, -1.9
-        # 2.2, -2
-        # 3.4, -1.3
-        # 2, -1
-        # 1.5, 0
-        # 1, 0
-        # 2.5, 1
-        # 1.5, 2
-        # 1,1
-        # 1,2
-        # 0, 2
-        # -1, 1
-        # -1,75, 1
-        # -1,75, 2
-        # -1.5, 4.5
-        # -1, 3
-        # 0, 3.2
-        # 0.5, 2.8
-        # 1, 3.5
-        # 1.5, 2.9
-        # 2,3
-        # Down right
-        navigation_list.append(("go", get_pose_obj(-1.0, 0.25, 0.57)))
-        navigation_list.append(("go", get_pose_obj(-1.6, 0.7, 0.57)))
-        navigation_list.append(("go", get_pose_obj(-0.4, -0.6, 0.57)))
-        navigation_list.append(("go", get_pose_obj(-0.3, -1.85, 0.57)))
-
-        # Right
-        navigation_list.append(("go", get_pose_obj(1.0, -1.9, 0.57)))
-        navigation_list.append(("go", get_pose_obj(2.2, -2.0, 0.57)))
-
-        # Right up
-        navigation_list.append(("go", get_pose_obj(3.4, -1.3, 0.57)))
-        navigation_list.append(("go", get_pose_obj(2.0, -1.0, 0.57)))
-
-        # Centre up
-        navigation_list.append(("go", get_pose_obj(1.5, 0.0, 0.57)))
-        navigation_list.append(("go", get_pose_obj(1.0, 0.0, 0.57)))
-        navigation_list.append(("go", get_pose_obj(2.5, 1.0, 0.57)))
-
-        # Slightly left slightly up
-        navigation_list.append(("go", get_pose_obj(1.5, 2.0, 0.57)))
-        navigation_list.append(("go", get_pose_obj(1.0,1.0, 0.57)))
-        navigation_list.append(("go", get_pose_obj(1.0,2.0, 0.57)))
-        navigation_list.append(("go", get_pose_obj(0.0, 2.0, 0.57)))
-
-        # Slightly left slightly down
-        navigation_list.append(("go", get_pose_obj(-1.0, 1.0, 0.57)))
-        navigation_list.append(("go", get_pose_obj(-1.75, 1.0, 0.57)))
-        navigation_list.append(("go", get_pose_obj(-1.75, 2.0, 0.57)))
-
-        # Left down
-        navigation_list.append(("go", get_pose_obj(-1.5, 4.5, 0.57)))
-        navigation_list.append(("go", get_pose_obj(-1.0, 3.0, 0.57)))
-
-        # Left corridor
-        navigation_list.append(("go", get_pose_obj(0.0, 3.2, 0.57)))
-        navigation_list.append(("go", get_pose_obj(0.5, 2.8, 0.57)))
-        navigation_list.append(("go", get_pose_obj(1.0, 3.5, 0.57)))
-
-        # Left up
-        navigation_list.append(("go", get_pose_obj(1.5, 2.9, 0.57)))
-        navigation_list.append(("go", get_pose_obj(2.0,3.0, 0.57)))
-
-        # Back to slightly left slightly up
-        navigation_list.append(("go", get_pose_obj(1.5, 2.0, 0.57)))
-    
-       
-    
-    
-
-
-
-
-
-    
-        
-
-
-    # rc.make_cv2_window()
-    # rc.show_map()
-
-    # add_to_navigation_ix = 0
-
     while len(rc.navigation_list) > 0:
-
-
-
-
-
-        # # Printing the name of the goal if the goal was added on the initial list.
-        # if add_to_navigation_ix < len(add_to_navigation):
-            
-        #     # # Tole se izkaze, da je ekstremno off. Ali je nekaj narobe, ali pa morda
-        #     # # preredko dobivamo update na pozicijo in je ta point nekoliko star.
-        #     # print(rc.get_curr_pos())
-            
-            
-        #     print(add_to_navigation[add_to_navigation_ix])
-        #     add_to_navigation_ix += 1
-
 
         curr_type, curr_goal, curr_goal_coordinates = rc.navigation_list[0]
         
@@ -925,8 +658,10 @@ def main(args=None):
 
             rc.last_destination_goal = (curr_type, curr_goal_coordinates)
             rc.goToPose(curr_goal)
+
         elif curr_type == "spin":
             rc.spin(curr_goal)
+
         elif curr_type == "say_hi":
             print(rc.navigation_list[0][0])
             print(rc.navigation_list[0][2])
@@ -953,11 +688,7 @@ def main(args=None):
     input("Navigation list completed, waiting to terminate. Enter anything.")
         
 
-
-
-    
-
-    # Example
+    """# Example
     if False:    
         # Finally send it a goal to reach
         goal_pose = PoseStamped()
@@ -974,12 +705,7 @@ def main(args=None):
             rc.info("Waiting for the task to complete...")
             time.sleep(1)
 
-        rc.spin(-0.57)
-
-
-
-
-
+        rc.spin(-0.57)"""
 
 
     rc.destroyNode()
