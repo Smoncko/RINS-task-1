@@ -172,7 +172,7 @@ class detect_faces(Node):
             # If the transformation exists, create a marker from the point, in order to visualize it in Rviz
             marker_in_map_frame = self.create_marker(point_in_map_frame, self.marker_id)
 
-            if self.new(marker_in_map_frame):
+            if not math.isnan(marker_in_map_frame.pose.position.x) and not math.isnan(marker_in_map_frame.pose.position.y) and self.new(marker_in_map_frame):
 
                 # check if face already detected
                 if self.notFalsePositive(marker_in_map_frame):
