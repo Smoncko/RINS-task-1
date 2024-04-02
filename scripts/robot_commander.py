@@ -97,6 +97,8 @@ class RobotCommander(Node):
         self.navigation_list = []
         self.just_canceled = False
 
+        self.faces_greeted = 0
+
 
         self.map_np = None
         self.map_data = {"map_load_time":None,
@@ -693,6 +695,11 @@ def main(args=None):
             printout_counter += 1
 
             time.sleep(1)
+
+        if curr_type == "say_hi":
+            rc.faces_greeted += 1
+            if rc.faces_greeted == 3:
+                break
         
         rc.just_canceled = False
         
