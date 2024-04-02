@@ -111,6 +111,7 @@ class RobotCommander(Node):
         
         # Flags and helper variables
         self.goal_handle = None
+        self.cancel_goal = False
         self.result_future = None
         self.feedback = None
         self.status = None
@@ -268,7 +269,9 @@ class RobotCommander(Node):
 
         self.prepend_to_nav_list(add_to_navigation, spin_full_after_go=False)
 
-        self.cancelTask()
+        self.cancel_goal
+        # self.cancelTask()
+
 
 
 
@@ -402,11 +405,11 @@ class RobotCommander(Node):
         """Cancel pending task request of any type."""
         self.info('Canceling current task.')
         if self.result_future:
-            # print("here")
+            print("here")
             future = self.goal_handle.cancel_goal_async()
-            # print("here")
-            # rclpy.spin_until_future_complete(self, future)
-            # print("here")
+            print("here")
+            rclpy.spin_until_future_complete(self, future)
+            print("here")
         return
 
 
@@ -900,6 +903,12 @@ def main(args=None):
     while len(rc.navigation_list) > 0:
 
 
+        print("\n\n")
+        print(rc.navigation_list[0][0])
+        print(rc.navigation_list[0][2])
+        print("\n\n")
+
+
 
 
 
@@ -918,27 +927,22 @@ def main(args=None):
         curr_type, curr_goal, curr_goal_coordinates = rc.navigation_list[0]
         
         if curr_type == "go":
-            print(rc.navigation_list[0][0])
-            print(rc.navigation_list[0][2])
-            print(rc.navigation_list[1][0])
-            print(rc.navigation_list[1][2])
 
             rc.last_destination_goal = (curr_type, curr_goal_coordinates)
             rc.goToPose(curr_goal)
         elif curr_type == "spin":
             rc.spin(curr_goal)
         elif curr_type == "say_hi":
-            print(rc.navigation_list[0][0])
-            print(rc.navigation_list[0][2])
-            print(rc.navigation_list[1][0])
-            print(rc.navigation_list[1][2])
-
-            say_hi()
+            print("Zivjo")
+            # say_hi()
         
         while not rc.just_canceled and not rc.isTaskComplete():
 
             # if mg.clicked or rc.stop_spin:
             #     rc.cancel_goal()
+            if rc.cancel_goal:
+                rc.cancel_goal = False
+                rc.cancelTask()
 
             rc.info("Waiting for the task to complete...")
             time.sleep(1)
