@@ -61,6 +61,9 @@ class detect_faces(Node):
         # all detected faces by YOLO
         self.faces = []
 
+        self.buffer_size = 10
+        self.face_buffer = []
+
         # for unique faces
         self.marker_id = 0
         self.min_distance_between_faces = 1.
@@ -131,6 +134,24 @@ class detect_faces(Node):
         
         return True
     
+    def notFalsePositive(self, marker):
+        # check if enough markers have been detected to prevent a false positive
+
+        self.face_buffer.append(marker)
+        if len(self.face_buffer) < self.buffer_size + 1:
+            return False
+
+        face_counter = 0
+        for face in self.face_buffer:
+            if self.distance(marker, face) < self.min_distance_between_faces:
+                face_counter += 1
+
+        self.face_buffer.pop(0)
+
+        if face_counter < self.buffer_size // 3:
+            return False
+        return True
+    
     def publish_face(self, point_in_robot_frame):
 
         # Now we look up the transform between the base_link and the map frames
@@ -151,25 +172,27 @@ class detect_faces(Node):
             # If the transformation exists, create a marker from the point, in order to visualize it in Rviz
             marker_in_map_frame = self.create_marker(point_in_map_frame, self.marker_id)
 
-            # check if face already detected
             if self.new(marker_in_map_frame):
 
-                # if it's new, append it to detected faces
-                self.detected_faces.append(marker_in_map_frame)
+                # check if face already detected
+                if self.notFalsePositive(marker_in_map_frame):
 
-                # Publish the marker
-                self.marker_pub.publish(marker_in_map_frame)
-                self.get_logger().info(f"The marker has been published to {self.marker_topic}. You are able to visualize it in Rviz")
-                #self.get_logger().info(f"x: {marker_in_map_frame.pose.position.x}, y: {marker_in_map_frame.pose.position.y}, z: {marker_in_map_frame.pose.position.z}")
-                
-                for face in self.detected_faces:
-                    self.get_logger().info(f"x: {face.pose.position.x}, y: {face.pose.position.y}, z: {face.pose.position.z}")
+                    # if it's new, append it to detected faces
+                    self.detected_faces.append(marker_in_map_frame)
 
-                # Increase the marker_id, so we dont overwrite the same marker.
-                self.marker_id += 1
+                    # Publish the marker
+                    self.marker_pub.publish(marker_in_map_frame)
+                    self.get_logger().info(f"The marker has been published to {self.marker_topic}. You are able to visualize it in Rviz")
+                    #self.get_logger().info(f"x: {marker_in_map_frame.pose.position.x}, y: {marker_in_map_frame.pose.position.y}, z: {marker_in_map_frame.pose.position.z}")
+                    
+                    for face in self.detected_faces:
+                        self.get_logger().info(f"x: {face.pose.position.x}, y: {face.pose.position.y}, z: {face.pose.position.z}")
 
-            #else:
-                #self.get_logger().info(f"Face has already been detected")
+                    # Increase the marker_id, so we dont overwrite the same marker.
+                    self.marker_id += 1
+
+                #else:
+                    #self.get_logger().info(f"Face has already been detected")
 
         except TransformException as te:
             self.get_logger().info(f"Could not get the transform: {te}")
