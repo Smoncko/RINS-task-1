@@ -269,7 +269,7 @@ class RobotCommander(Node):
 
         self.prepend_to_nav_list(add_to_navigation, spin_full_after_go=False)
 
-        self.cancel_goal
+        self.cancel_goal = True
         # self.cancelTask()
 
 
@@ -405,11 +405,11 @@ class RobotCommander(Node):
         """Cancel pending task request of any type."""
         self.info('Canceling current task.')
         if self.result_future:
-            print("here")
+            # print("here")
             future = self.goal_handle.cancel_goal_async()
-            print("here")
+            # print("here")
             rclpy.spin_until_future_complete(self, future)
-            print("here")
+            # print("here")
         return
 
 
@@ -933,9 +933,10 @@ def main(args=None):
         elif curr_type == "spin":
             rc.spin(curr_goal)
         elif curr_type == "say_hi":
-            print("Zivjo")
-            # say_hi()
+            say_hi()
         
+
+        printout_counter = 0
         while not rc.just_canceled and not rc.isTaskComplete():
 
             # if mg.clicked or rc.stop_spin:
@@ -944,7 +945,10 @@ def main(args=None):
                 rc.cancel_goal = False
                 rc.cancelTask()
 
-            rc.info("Waiting for the task to complete...")
+            if printout_counter % 3 == 0:
+                rc.info("Waiting for the task to complete...")
+            printout_counter += 1
+
             time.sleep(1)
         
         rc.just_canceled = False
