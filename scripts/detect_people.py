@@ -143,7 +143,7 @@ class detect_faces(Node):
 
         face_counter = 0
         for face in self.face_buffer:
-            if self.distance(marker, face) < self.min_distance_between_faces:
+            if self.distance(marker, face) < self.min_distance_between_faces / 2:
                 face_counter += 1
 
         self.face_buffer.pop(0)

@@ -93,7 +93,7 @@ class RobotCommander(Node):
         self.is_docked = None
 
         self.last_destination_goal = ("go", (0.0, 0.0, 0.57))
-        self.hello_dist = 0.3
+        self.hello_dist = 0.5
         self.navigation_list = []
         self.just_canceled = False
 
@@ -200,6 +200,7 @@ class RobotCommander(Node):
             ("go", (face_goal_location[0], face_goal_location[1], fi)),
             ("go", (face_goal_location[0], face_goal_location[1], fi)),
             ("say_hi", 0),
+            ("spin", 3.14),
             self.last_destination_goal
         ]
 
