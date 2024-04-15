@@ -95,7 +95,6 @@ class RobotCommander(Node):
         self.last_destination_goal = ("go", (0.0, 0.0, 0.57))
         self.hello_dist = 0.5
         self.navigation_list = []
-        self.just_canceled = False
 
         self.faces_greeted = 0
 
@@ -197,7 +196,6 @@ class RobotCommander(Node):
         fi = np.arctan2(vec_to_face_normed[1], vec_to_face_normed[0])
 
         add_to_navigation = [
-            ("go", (face_goal_location[0], face_goal_location[1], fi)),
             ("go", (face_goal_location[0], face_goal_location[1], fi)),
             ("say_hi", 0),
             ("spin", 3.14),
@@ -340,11 +338,8 @@ class RobotCommander(Node):
         """Cancel pending task request of any type."""
         self.info('Canceling current task.')
         if self.result_future:
-            # print("here")
             future = self.goal_handle.cancel_goal_async()
-            # print("here")
             rclpy.spin_until_future_complete(self, future)
-            # print("here")
         return
 
 
@@ -564,8 +559,9 @@ class RobotCommander(Node):
             elif tup[0] == "say_hi":
                 self.navigation_list.insert(0, ("say_hi", None, None))
 
-def say_hi():
-    playsound("src/RINS-task-1/voice/zivjo.mp3")
+    def say_hi(self):
+        playsound("src/RINS-task-1/voice/zivjo.mp3")
+        self.faces_greeted += 1
 
 
 def main(args=None):
@@ -661,6 +657,16 @@ def main(args=None):
         print("\n\n")
         print(rc.navigation_list[0][0])
         print(rc.navigation_list[0][2])
+        print("Goals following it:")
+
+        desired_num_of_following_goals = 7
+        for i in range(1, desired_num_of_following_goals+1):
+            if i < len(rc.navigation_list):
+                print(rc.navigation_list[i][0])
+                print(rc.navigation_list[i][2])
+                if i == desired_num_of_following_goals:
+                    print("And more...")
+
         print("\n\n")
 
 
@@ -679,11 +685,17 @@ def main(args=None):
             rc.spin(curr_goal)
 
         elif curr_type == "say_hi":
-            say_hi()
+            rc.say_hi()
+            if rc.faces_greeted == 3:
+                break
         
 
+        del rc.navigation_list[0]
+
+
+
         printout_counter = 0
-        while not rc.just_canceled and not rc.isTaskComplete():
+        while not rc.isTaskComplete():
 
             # if mg.clicked or rc.stop_spin:
             #     rc.cancel_goal()
@@ -697,14 +709,8 @@ def main(args=None):
 
             time.sleep(1)
 
-        if curr_type == "say_hi":
-            rc.faces_greeted += 1
-            if rc.faces_greeted == 3:
-                break
         
-        rc.just_canceled = False
         
-        del rc.navigation_list[0]
     
         # input("Enter sth to continue.")
         
